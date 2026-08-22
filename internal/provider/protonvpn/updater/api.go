@@ -1015,7 +1015,8 @@ type logicalServer struct {
 }
 
 type physicalServer struct {
-	EntryIP         netip.Addr `json:"EntryIP"`
+	EntryIP         netip.Addr `json:"EntryIP,omitempty"`   // IPv4 entry address, invalid if not set
+	EntryIPv6       netip.Addr `json:"EntryIPv6,omitempty"` // IPv6 entry address, invalid if not set
 	ExitIP          netip.Addr `json:"ExitIP"`
 	Domain          string     `json:"Domain"`
 	Status          uint8      `json:"Status"`
@@ -1051,8 +1052,7 @@ func (c *apiClient) fetchServersOnce(ctx context.Context, cookie cookie) (
 	data apiData, err error,
 ) {
 	response, err := c.request(ctx, func() (*http.Request, error) {
-		request, err := http.NewRequestWithContext(ctx,
-			http.MethodGet, c.apiURLBase+"/vpn/logicals", nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiURLBase+"/vpn/v1/logicals?WithIpV6=1", nil)
 		if err != nil {
 			return nil, err
 		}

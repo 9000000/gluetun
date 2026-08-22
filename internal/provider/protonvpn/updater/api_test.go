@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -174,7 +175,7 @@ func (api *testProtonAPI) handler(t *testing.T, srpServer *srp.Server) http.Hand
 	mux.HandleFunc("POST /api/core/v4/auth/2fa", api.handleAuth2FA(t))
 	mux.HandleFunc("GET /api/core/v4/auth/scopes", api.handleScopes(t))
 	mux.HandleFunc("POST /api/auth/refresh", api.handleRefresh(t))
-	mux.HandleFunc("GET /api/vpn/logicals", api.handleLogicals(t))
+	mux.HandleFunc("GET /api/vpn/v1/logicals", api.handleLogicals(t))
 	return mux
 }
 
@@ -616,6 +617,151 @@ func TestAuth(t *testing.T) {
 			assert.Empty(t, data.LogicalServers)
 		})
 	}
+}
+
+func TestFetchServersOnce(t *testing.T) {
+	t.Parallel()
+
+	ipv4, err := netip.ParseAddr("84.17.63.8")
+	require.NoError(t, err)
+	ipv6, err := netip.ParseAddr("2a02:6ea0:d702::10")
+	require.NoError(t, err)
+	ipv4Only, err := netip.ParseAddr("1.2.3.4")
+	require.NoError(t, err)
+	ipv6Only, err := netip.ParseAddr("2001:db8::1")
+	require.NoError(t, err)
+
+	testCases := map[string]struct {
+		serversJSON string
+		expected    []physicalServer
+	}{
+		"ipv4_and_ipv6_entry_addresses": {
+			//nolint:lll
+			serversJSON: `[{"EntryIP":"84.17.63.8","EntryIPv6":"2a02:6ea0:d702::10","ExitIP":"84.17.63.8","Domain":"node-us-58.protonvpn.net","X25519PublicKey":"test-key","Status":1}]`,
+			expected: []physicalServer{
+				{
+					EntryIP: ipv4, EntryIPv6: ipv6, ExitIP: ipv4,
+					Domain: "node-us-58.protonvpn.net", X25519PublicKey: "test-key", Status: 1,
+				},
+			},
+		},
+		"ipv4_only_entry_address": {
+			serversJSON: `[{"EntryIP":"1.2.3.4","ExitIP":"1.2.3.4",` +
+				`"Domain":"node-us-59.protonvpn.net","X25519PublicKey":"test-key","Status":1}]`,
+			expected: []physicalServer{
+				{
+					EntryIP: ipv4Only, ExitIP: ipv4Only,
+					Domain: "node-us-59.protonvpn.net", X25519PublicKey: "test-key", Status: 1,
+				},
+			},
+		},
+		"ipv6_only_entry_address": {
+			serversJSON: `[{"EntryIPv6":"2001:db8::1","ExitIP":"1.2.3.4",` +
+				`"Domain":"node-us-60.protonvpn.net","X25519PublicKey":"test-key","Status":1}]`,
+			expected: []physicalServer{
+				{
+					EntryIPv6: ipv6Only, ExitIP: ipv4Only,
+					Domain: "node-us-60.protonvpn.net", X25519PublicKey: "test-key", Status: 1,
+				},
+			},
+		},
+		"null_entry_addresses": {
+			serversJSON: `[{"EntryIP":null,"EntryIPv6":null,"ExitIP":"1.2.3.4",` +
+				`"Domain":"node-us-61.protonvpn.net","X25519PublicKey":"test-key","Status":1}]`,
+			expected: []physicalServer{
+				{
+					ExitIP: ipv4Only,
+					Domain: "node-us-61.protonvpn.net", X25519PublicKey: "test-key", Status: 1,
+				},
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			logicalsJSON := `{"LogicalServers":[{"Name":"US#81","ExitCountry":"US",` +
+				`"Servers":` + testCase.serversJSON + `,"Features":8,"Tier":2}]}`
+
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				assert.Equal(t, http.MethodGet, request.Method)
+				assert.Equal(t, "/api/vpn/v1/logicals", request.URL.Path)
+				assert.Equal(t, "1", request.URL.Query().Get("WithIpV6"))
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(logicalsJSON))
+			}))
+			defer server.Close()
+
+			var seed [32]byte
+			_, _ = crand.Read(seed[:])
+			client := &apiClient{
+				apiURLBase: server.URL + "/api",
+				httpClient: server.Client(),
+				generator:  rand.NewChaCha8(seed),
+			}
+
+			data, err := client.fetchServersOnce(context.Background(), cookie{})
+			require.NoError(t, err)
+			require.Len(t, data.LogicalServers, 1)
+			assert.Equal(t, testCase.expected, data.LogicalServers[0].Servers)
+		})
+	}
+}
+
+func TestIpToServers(t *testing.T) {
+	t.Parallel()
+
+	ipv4 := netip.MustParseAddr("84.17.63.8")
+	ipv6 := netip.MustParseAddr("2a02:6ea0:d702::10")
+	ipv6Other := netip.MustParseAddr("2001:db8::2")
+
+	testCases := map[string]struct {
+		entryIPv4   netip.Addr
+		entryIPv6   netip.Addr
+		expectedIPs []netip.Addr
+	}{
+		"ipv4_and_ipv6_entry_addresses": {
+			entryIPv4:   ipv4,
+			entryIPv6:   ipv6,
+			expectedIPs: []netip.Addr{ipv4, ipv6},
+		},
+		"ipv4_only_entry_address": {
+			entryIPv4:   ipv4,
+			expectedIPs: []netip.Addr{ipv4},
+		},
+		"ipv6_only_entry_address": {
+			entryIPv6:   ipv6,
+			expectedIPs: []netip.Addr{ipv6},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ipToServer := make(ipToServers)
+			ipToServer.add("Country", "Region", "City", "name", "hostname", "pubkey",
+				false, testCase.entryIPv4, testCase.entryIPv6, features{})
+
+			servers := ipToServer.toServersSlice()
+			require.Len(t, servers, 2)
+			assert.Equal(t, testCase.expectedIPs, servers[0].IPs)
+			assert.Equal(t, testCase.expectedIPs, servers[1].IPs)
+		})
+	}
+
+	t.Run("same_entry_address_added_once", func(t *testing.T) {
+		t.Parallel()
+
+		ipToServer := make(ipToServers)
+		ipToServer.add("Country", "Region", "City", "name", "hostname", "pubkey",
+			false, ipv4, ipv6, features{})
+		ipToServer.add("Country", "Region", "City", "name", "hostname", "pubkey",
+			false, ipv4, ipv6Other, features{})
+
+		assert.Equal(t, 1, len(ipToServer))
+	})
 }
 
 func TestNormalizeTOTPSecret(t *testing.T) {

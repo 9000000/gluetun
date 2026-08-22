@@ -82,7 +82,8 @@ func (u *Updater) FetchServers(ctx context.Context, minServers int) (
 			}
 
 			hostname := physicalServer.Domain
-			entryIP := physicalServer.EntryIP
+			entryIPv4 := physicalServer.EntryIP
+			entryIPv6 := physicalServer.EntryIPv6
 			wgPubKey := physicalServer.X25519PublicKey
 
 			// Note: for multi-hop use the server name or hostname
@@ -93,7 +94,7 @@ func (u *Updater) FetchServers(ctx context.Context, minServers int) (
 				u.warner.Warn(warning)
 			}
 
-			ipToServer.add(country, region, city, name, hostname, wgPubKey, free, entryIP, features)
+			ipToServer.add(country, region, city, name, hostname, wgPubKey, free, entryIPv4, entryIPv6, features)
 		}
 	}
 
