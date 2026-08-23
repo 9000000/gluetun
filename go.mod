@@ -15,7 +15,7 @@ require (
 	github.com/miekg/dns v1.1.62
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pquerna/otp v1.5.0
-	github.com/qdm12/dns/v2 v2.0.0-rc9.0.20260421173011-9de8e7fdbe3a
+	github.com/qdm12/dns/v2 v2.0.0-rc9.0.20260820122023-f9e5a4ced3dd
 	github.com/qdm12/gluetun-servers v0.2.0
 	github.com/qdm12/goservices v0.1.1-0.20251104135713-6bee97bd4978
 	github.com/qdm12/gosettings v0.4.4
