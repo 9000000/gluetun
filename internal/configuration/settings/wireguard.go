@@ -92,14 +92,19 @@ func (w Wireguard) validate(vpnProvider string, ipv6Supported, amneziawg bool) (
 	if len(w.Addresses) == 0 {
 		return errors.New("interface address is not set")
 	}
-	for i, ipNet := range w.Addresses {
-		if !ipNet.IsValid() {
-			return fmt.Errorf("interface address is not set: for address at index %d", i)
-		}
 
-		if !ipv6Supported && ipNet.Addr().Is6() {
-			return fmt.Errorf("interface address is IPv6 but IPv6 is not supported: address %s", ipNet.String())
+	hasIPv4 := false
+	for i, ipNet := range w.Addresses {
+		switch {
+		case !ipNet.IsValid():
+			return fmt.Errorf("interface address is not set: for address at index %d", i)
+		case ipNet.Addr().Is4():
+			hasIPv4 = true
 		}
+	}
+	if !hasIPv4 && !ipv6Supported {
+		return fmt.Errorf("no IPv4 interface addresses in %v but IPv6 is not supported",
+			w.Addresses)
 	}
 
 	// Validate AllowedIPs
