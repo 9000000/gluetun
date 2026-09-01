@@ -70,6 +70,8 @@ func Test_Settings_String(t *testing.T) {
 |   └── Check addresses:
 |       ├── [2001:4860:4860::8888]:53
 |       └── [2606:4700:4700::1111]:53
+├── Metrics settings:
+|   └── Type: noop
 ├── Health settings:
 |   ├── Server listening address: 127.0.0.1:9999
 |   ├── Target addresses:
