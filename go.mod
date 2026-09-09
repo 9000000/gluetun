@@ -34,7 +34,7 @@ require (
 	golang.org/x/net v0.55.0
 	golang.org/x/sys v0.45.0
 	golang.org/x/text v0.38.0
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+	golang.zx2c4.com/wireguard v0.0.0-20260522210424-ecfc5a8d5446
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230429144221-925a1e7659e6
 	google.golang.org/protobuf v1.35.1
 	gopkg.in/ini.v1 v1.67.3
