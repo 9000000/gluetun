@@ -26,6 +26,7 @@ func Test_Settings_String(t *testing.T) {
 |   |   ├── Name: private internet access
 |   |   └── Server selection settings:
 |   |       ├── VPN type: openvpn
+|   |       ├── Selection mode: random
 |   |       └── OpenVPN server selection settings:
 |   |           ├── Protocol: UDP
 |   |           └── Private Internet Access encryption preset: strong
