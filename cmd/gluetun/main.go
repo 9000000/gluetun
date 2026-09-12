@@ -15,7 +15,6 @@ import (
 	_ "time/tzdata"
 
 	_ "github.com/breml/rootcerts"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/qdm12/dns/v2/pkg/doh"
 	dnsprovider "github.com/qdm12/dns/v2/pkg/provider"
 	"github.com/qdm12/gluetun/internal/alpine"
@@ -206,18 +205,6 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
 	}
 	logger.Patch(log.SetLevel(logLevel))
 	netLinker.PatchLoggerLevel(logLevel)
-
-	// Prometheus registry shared by all metrics collectors
-	// and the Prometheus metrics server.
-	prometheusRegistry := prometheus.NewRegistry()
-	metricsServer, err := metrics.New(allSettings.Metrics, logger, prometheusRegistry)
-	if err != nil {
-		return fmt.Errorf("creating metrics server: %w", err)
-	}
-	metricsRunError, err := metricsServer.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("starting metrics server: %w", err)
-	}
 
 	routingLogger := logger.New(log.SetComponent("routing"))
 	routingConf := routing.New(netLinker, routingLogger)
@@ -470,6 +457,15 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
 	vpnHandler, vpnCtx, vpnDone := goshutdown.NewGoRoutineHandler(
 		"vpn", goroutine.OptionTimeout(time.Second))
 	go vpnLooper.Run(vpnCtx, vpnDone)
+
+	metricsServer, err := metrics.New(allSettings.Metrics, logger, vpnLooper, netLinker)
+	if err != nil {
+		return fmt.Errorf("creating metrics server: %w", err)
+	}
+	metricsRunError, err := metricsServer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("starting metrics server: %w", err)
+	}
 
 	updaterLooper := updater.NewLoop(allSettings.Updater,
 		providers, storage, httpClient, updaterLogger)
